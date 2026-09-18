@@ -993,6 +993,9 @@ If you use VLM-based SARM annotation, place the official SARM VLM under `./check
 
 ## Usage
 
+For optional PI0.5 PPO training with the RLinf backend, see the
+[RLinf integration guide](docs/rlinf.md) (LIBERO-10 interfaces and RoboTwin experiments).
+
 <details>
 <summary><b>Local debugging</b></summary>
 
