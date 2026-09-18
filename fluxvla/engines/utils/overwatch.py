@@ -322,5 +322,10 @@ def initialize_overwatch(
         Union[DistributedOverwatch, PureOverwatch]: An appropriate logger based
         on `WORLD_SIZE` env.
     """
+    # External RL workers import model classes before assigning their own
+    # rendezvous ports. Logging must not let Accelerate create a competing
+    # default process group during those imports; RLinf owns distribution.
+    if os.environ.get('FLUX_RL_EXTERNAL_DISTRIBUTED') == '1':
+        return PureOverwatch(name)
     return DistributedOverwatch(name) if int(os.environ.get(
         'WORLD_SIZE', -1)) != -1 else PureOverwatch(name)
