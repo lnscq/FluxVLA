@@ -1,0 +1,38 @@
+defaults:
+  - _smolvla_ppo_base
+  - _self_
+
+hydra:
+  searchpath:
+    - file://${oc.env:RLINF_CONFIG_DIR}
+
+experiment:
+  audit_actor: true
+  probability_tolerance: 0.0001
+  placement:
+    actor: 0-1
+    env,rollout: 2-3
+
+cluster:
+  component_placement: ${experiment.placement}
+
+runner:
+  max_epochs: 5
+  max_steps: 5
+  save_interval: 1
+  val_check_interval: 1
+  logger:
+    project_name: fluxvla-rl-smolvla
+    experiment_name: smolvla_libero10_smoke
+    logger_backends: [wandb]
+
+actor:
+  seed: 1234
+  fsdp_config:
+    enable_gradient_accumulation: false
+
+env:
+  train:
+    total_num_envs: 8
+  eval:
+    total_num_envs: 8

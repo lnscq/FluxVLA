@@ -1,7 +1,7 @@
 defaults:
   - env@env.train: libero_10
   - env@env.eval: libero_10
-  - model/fluxvla_pi05@actor.model
+  - model@actor.model: fluxvla_pi05
   - hybrid_engines/fsdp@actor.fsdp_config
   - weight_syncer/bucket_syncer@weight_syncer
   - override hydra/job_logging: stdout

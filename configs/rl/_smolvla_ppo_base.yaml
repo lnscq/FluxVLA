@@ -1,0 +1,21 @@
+defaults:
+  - _ppo_base
+  - override model@actor.model: fluxvla_smolvla
+  - _self_
+
+runner:
+  logger:
+    project_name: fluxvla-rl-smolvla
+    experiment_name: libero_10_ppo_fluxvla_smolvla
+
+rollout:
+  # Eval-only workers read rollout.model instead of actor.model.
+  model: ${actor.model}
+
+actor:
+  fsdp_config:
+    wrap_policy:
+      # Text/expert layers are called through their submodules, not their
+      # decoder forward. Keep their weights in the root FSDP2 shard.
+      transformer_layer_cls_to_wrap: [SmolVLMEncoderLayer]
+      module_classes_to_wrap: [LinearProjector, ValueHead]
