@@ -1,5 +1,9 @@
 # PI0.5 reinforcement learning with RLinf
 
+SmolVLA also uses this backend through `fluxvla_smolvla`; see the
+[SmolVLA integration guide](rlinf_smolvla.md) for its LIBERO-10 recipe,
+model-specific FSDP constraints and validation boundaries.
+
 FluxVLA supplies the PI0.5 policy, observation/action adapters, flow-SDE sampling,
 and launch configuration. RLinf supplies environment orchestration, PPO/GAE,
 FSDP2, weight synchronization, and checkpoint storage. Actor and rollout workers
