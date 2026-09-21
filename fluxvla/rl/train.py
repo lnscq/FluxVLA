@@ -1,4 +1,4 @@
-"""Launch Flux PI0.5 policies with the RLinf PPO/FSDP backend."""
+"""Launch Flux flow policies with the RLinf PPO/FSDP backend."""
 
 import importlib.util
 import os
@@ -18,7 +18,7 @@ def prepare_environment():
                        rlinf_root / 'examples/embodiment/config'))
     if not config_dir.is_dir():
         raise FileNotFoundError(
-            f'RLinf configs missing: {config_dir}; set RLINF_CONFIG_DIR')
+            f'RLinf configs missing: {config_dir}. Set RLINF_CONFIG_DIR')
     os.environ['FLUXVLA_ROOT'] = str(flux_root)
     os.environ['RLINF_CONFIG_DIR'] = str(config_dir.resolve())
     # Support a source checkout without requiring an editable install.
@@ -30,7 +30,7 @@ def prepare_environment():
     existing = os.environ.get('RLINF_EXT_MODULE')
     if existing and existing != extension:
         raise ValueError(
-            f'Conflicting RLINF_EXT_MODULE={existing}; expected {extension}')
+            f'Conflicting RLINF_EXT_MODULE={existing}. Expected {extension}')
     os.environ['RLINF_EXT_MODULE'] = extension
     os.environ['FLUX_RL_EXTERNAL_DISTRIBUTED'] = '1'
     return flux_root
@@ -53,8 +53,24 @@ def validate_frontend_cfg(cfg, *, evaluation=False):
     if cfg.runner.get('only_eval', False) and not evaluation:
         raise ValueError('Use periodic validation or the policy eval API; '
                          'this CLI trains PPO')
-    if cfg.actor.model.model_type != 'fluxvla_pi05':
-        raise ValueError('Expected actor.model.model_type=fluxvla_pi05')
+    if cfg.actor.model.model_type not in ('fluxvla_pi05', 'fluxvla_smolvla'):
+        raise ValueError('Expected a registered FluxVLA RL model type')
+    if cfg.actor.model.model_type == 'fluxvla_smolvla':
+        if any(cfg.env[phase].env_type != 'libero'
+               for phase in ('train', 'eval')):
+            raise ValueError('SmolVLA RL currently supports LIBERO only')
+        wrap = cfg.actor.fsdp_config.wrap_policy
+        expected_layers = ['SmolVLMEncoderLayer']
+        expected_modules = ['LinearProjector', 'ValueHead']
+        layers_match = list(
+            wrap.transformer_layer_cls_to_wrap) == expected_layers
+        modules_match = list(wrap.module_classes_to_wrap) == expected_modules
+        if not (layers_match and modules_match):
+            raise ValueError('Use the SmolVLA FSDP wrap policy: '
+                             'interleaved decoder forwards bypass hooks')
+        if (cfg.actor.model.fluxvla.rollout_micro_batch_size !=
+                cfg.actor.micro_batch_size):
+            raise ValueError('SmolVLA rollout and actor microbatch must match')
     if (cfg.actor.model.precision != 'fp32'
             or cfg.rollout.model.precision != 'fp32'):
         raise ValueError('Keep model master weights fp32; '
@@ -117,7 +133,8 @@ def run(cfg):
     placement = HybridComponentPlacement(cfg, cluster)
     groups = {}
     actor_worker = EmbodiedFSDPActor
-    if cfg.env.train.env_type == 'robotwin':
+    if (cfg.env.train.env_type == 'robotwin'
+            or cfg.get('experiment', {}).get('audit_actor', False)):
         from .actor_worker import AuditedEmbodiedActor
         actor_worker = AuditedEmbodiedActor
     for name, worker in (('actor', actor_worker),

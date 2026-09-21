@@ -117,7 +117,7 @@ def load_sft_weights(model, path):
     model.pretrained_name_or_path = str(path)
 
 
-def build_pi05_policy(cfg, torch_dtype=None):
+def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
     """RLinf ModelBuilder(cfg, torch_dtype), with all model code in FluxVLA."""
     if torch_dtype not in (None, torch.float32):
         raise ValueError('FluxVLA RL requires FP32 master weights; '
@@ -138,13 +138,13 @@ def build_pi05_policy(cfg, torch_dtype=None):
     flux_cfg = Config.fromfile(
         str(Path(options.config_path).expanduser().resolve()))
     model_cfg = copy.deepcopy(flux_cfg.model)
-    if model_cfg.type != 'PI05FlowMatching':
-        raise ValueError('The first RL bridge supports PI05FlowMatching only')
-    model_cfg.type = FluxPI05RLPolicy
+    if model_cfg.type != model_type:
+        raise ValueError(f'Expected Flux model type {model_type}')
+    model_cfg.type = policy_class
     model_cfg.pretrained_name_or_path = None
     model_cfg.num_steps = int(cfg.num_steps)
     if options.get('action_horizon') is not None:
-        model_cfg.n_action_steps = int(options.action_horizon)
+        model_cfg[horizon_key] = int(options.action_horizon)
     # Gemma creates some norm parameters in BF16 even for an FP32 config.
     # Promote BEFORE copying checkpoint tensors or their FP32 values would be
     # irreversibly rounded, despite the final model reporting FP32 parameters.
@@ -182,3 +182,25 @@ def build_pi05_policy(cfg, torch_dtype=None):
         compute_dtype=torch.bfloat16
         if dtype_name == 'bf16' else torch.float32)
     return model.to(dtype=torch_dtype or torch.float32)
+
+
+def build_pi05_policy(cfg, torch_dtype=None):
+    return _build_policy(
+        cfg,
+        torch_dtype,
+        model_type='PI05FlowMatching',
+        policy_class=FluxPI05RLPolicy,
+        horizon_key='n_action_steps')
+
+
+def build_smolvla_policy(cfg, torch_dtype=None):
+    from .smolvla_policy import FluxSmolVLARLPolicy
+
+    if cfg.fluxvla.get('observation_adapter', 'libero') != 'libero':
+        raise ValueError('SmolVLA RL currently supports LIBERO only')
+    return _build_policy(
+        cfg,
+        torch_dtype,
+        model_type='SmolVLAFlowMatching',
+        policy_class=FluxSmolVLARLPolicy,
+        horizon_key='chunk_size')
