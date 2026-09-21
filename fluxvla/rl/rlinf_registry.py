@@ -1,5 +1,13 @@
 """Driver and Ray worker registration through RLINF_EXT_MODULE."""
 
+from .policy_specs import POLICY_SPECS, get_policy_spec, resolve_symbol
+
+
+def build_registered_policy(cfg, torch_dtype=None):
+    """Dispatch by declaration, including future non-flow policy builders."""
+    spec = get_policy_spec(cfg.model_type)
+    return resolve_symbol(spec.builder)(cfg, torch_dtype)
+
 
 def build_pi05(cfg, torch_dtype=None):
     from .bridge.builder import build_pi05_policy
@@ -17,9 +25,12 @@ def register():
     """Idempotently register the external policy in the current process."""
     from rlinf.models import register_model
 
-    register_model('fluxvla_pi05', build_pi05, category='embodied', force=True)
-    register_model(
-        'fluxvla_smolvla', build_smolvla, category='embodied', force=True)
+    for model_type in POLICY_SPECS:
+        register_model(
+            model_type,
+            build_registered_policy,
+            category='embodied',
+            force=True)
 
 
 register_all = register

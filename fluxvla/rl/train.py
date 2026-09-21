@@ -4,6 +4,8 @@ import importlib.util
 import os
 from pathlib import Path
 
+from .policy_specs import get_policy_spec
+
 
 def prepare_environment():
     """Expose absolute config locations to Hydra and the extension to Ray."""
@@ -11,7 +13,7 @@ def prepare_environment():
     spec = importlib.util.find_spec('rlinf')
     if spec is None or spec.origin is None:
         raise ImportError('Install RLinf core into the RL environment; '
-                          'see docs/rlinf_pi05.md')
+                          'see docs/rlinf.md')
     rlinf_root = Path(spec.origin).resolve().parents[1]
     config_dir = Path(
         os.environ.get('RLINF_CONFIG_DIR',
@@ -53,24 +55,7 @@ def validate_frontend_cfg(cfg, *, evaluation=False):
     if cfg.runner.get('only_eval', False) and not evaluation:
         raise ValueError('Use periodic validation or the policy eval API; '
                          'this CLI trains PPO')
-    if cfg.actor.model.model_type not in ('fluxvla_pi05', 'fluxvla_smolvla'):
-        raise ValueError('Expected a registered FluxVLA RL model type')
-    if cfg.actor.model.model_type == 'fluxvla_smolvla':
-        if any(cfg.env[phase].env_type != 'libero'
-               for phase in ('train', 'eval')):
-            raise ValueError('SmolVLA RL currently supports LIBERO only')
-        wrap = cfg.actor.fsdp_config.wrap_policy
-        expected_layers = ['SmolVLMEncoderLayer']
-        expected_modules = ['LinearProjector', 'ValueHead']
-        layers_match = list(
-            wrap.transformer_layer_cls_to_wrap) == expected_layers
-        modules_match = list(wrap.module_classes_to_wrap) == expected_modules
-        if not (layers_match and modules_match):
-            raise ValueError('Use the SmolVLA FSDP wrap policy: '
-                             'interleaved decoder forwards bypass hooks')
-        if (cfg.actor.model.fluxvla.rollout_micro_batch_size !=
-                cfg.actor.micro_batch_size):
-            raise ValueError('SmolVLA rollout and actor microbatch must match')
+    get_policy_spec(cfg.actor.model.model_type).validate_frontend(cfg)
     if (cfg.actor.model.precision != 'fp32'
             or cfg.rollout.model.precision != 'fp32'):
         raise ValueError('Keep model master weights fp32; '

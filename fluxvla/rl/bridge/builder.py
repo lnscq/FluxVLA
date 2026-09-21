@@ -9,8 +9,9 @@ from mmengine import Config
 from safetensors.torch import load_file
 
 from fluxvla.engines import build_vla_from_cfg
-from .observation import LiberoObservationAdapter
-from .pi05_policy import FluxPI05RLPolicy
+from ..policy_specs import (checkpoint_resolver_for, get_policy_spec,
+                            resolve_symbol)
+from .adapters import build_observation_adapter
 
 
 def read_checkpoint(path):
@@ -64,6 +65,7 @@ def load_sft_weights(model, path):
     if not isinstance(checkpoint, dict):
         raise TypeError('Checkpoint must contain a model state dict')
     expected = model.state_dict()
+    resolver = checkpoint_resolver_for(model)
     loaded, errors = {}, []
     for name, target in expected.items():
         if name in checkpoint:
@@ -77,28 +79,12 @@ def load_sft_weights(model, path):
         else:
             candidates = []
         candidates = list(dict.fromkeys(candidates))
-        # OpenPI serializes both sides of its tied vocabulary matrix. Accept
-        # only this documented alias and only when the tensors agree exactly.
-        aliases = {
-            ('paligemma_with_expert.paligemma.model.'
-             'language_model.embed_tokens.weight'),
-            'paligemma_with_expert.paligemma.lm_head.weight',
-        }
-        if name == 'llm_backbone.embed_tokens.weight' and set(
-                candidates) == aliases:
-            if not torch.equal(checkpoint[candidates[0]],
-                               checkpoint[candidates[1]]):
-                errors.append(f'{name}: shared embedding aliases disagree')
+        if resolver is not None and model.name_mapping:
+            try:
+                candidates = resolver(name, candidates, checkpoint)
+            except ValueError as error:
+                errors.append(f'{name}: {error}')
                 continue
-            candidates = candidates[:1]
-        # Flux allocates an unused expert vocabulary embedding; OpenPI drops
-        # it but retains the matching LM head. Never fill effective trunk
-        # parameters with random data to tolerate an incomplete checkpoint.
-        if (not candidates and name == 'llm_expert.embed_tokens.weight'
-                and model.name_mapping):
-            alias = 'paligemma_with_expert.gemma_expert.lm_head.weight'
-            if alias in checkpoint:
-                candidates = [alias]
         if len(candidates) != 1:
             errors.append(
                 f'{name}: expected one checkpoint match, found {candidates}')
@@ -117,8 +103,9 @@ def load_sft_weights(model, path):
     model.pretrained_name_or_path = str(path)
 
 
-def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
-    """RLinf ModelBuilder(cfg, torch_dtype), with all model code in FluxVLA."""
+def build_flow_policy(cfg, torch_dtype=None):
+    """Shared strict-SFT builder for declared flow-matching policies."""
+    spec = get_policy_spec(cfg.model_type)
     if torch_dtype not in (None, torch.float32):
         raise ValueError('FluxVLA RL requires FP32 master weights; '
                          'use compute_dtype for autocast')
@@ -126,6 +113,7 @@ def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
     if not path.exists():
         raise FileNotFoundError(f'Initial SFT checkpoint not found: {path}')
     options = cfg.fluxvla
+    spec.validate_adapter(options.get('observation_adapter', 'libero'))
     for key in ('joint_logprob', 'is_lora'):
         if cfg.get(key, False):
             raise ValueError(f'FluxVLA PPO v1 does not support {key}=True')
@@ -138,13 +126,13 @@ def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
     flux_cfg = Config.fromfile(
         str(Path(options.config_path).expanduser().resolve()))
     model_cfg = copy.deepcopy(flux_cfg.model)
-    if model_cfg.type != model_type:
-        raise ValueError(f'Expected Flux model type {model_type}')
-    model_cfg.type = policy_class
+    if model_cfg.type != spec.native_model_type:
+        raise ValueError(f'Expected Flux model type {spec.native_model_type}')
+    model_cfg.type = resolve_symbol(spec.policy_class)
     model_cfg.pretrained_name_or_path = None
     model_cfg.num_steps = int(cfg.num_steps)
     if options.get('action_horizon') is not None:
-        model_cfg[horizon_key] = int(options.action_horizon)
+        model_cfg[spec.horizon_config_key] = int(options.action_horizon)
     # Gemma creates some norm parameters in BF16 even for an FP32 config.
     # Promote BEFORE copying checkpoint tensors or their FP32 values would be
     # irreversibly rounded, despite the final model reporting FP32 parameters.
@@ -155,21 +143,7 @@ def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
         with Path(options.norm_stats_path).expanduser().open(
                 encoding='utf-8') as stream:
             stats = json.load(stream)
-    adapter_name = options.get('observation_adapter', 'libero')
-    if adapter_name == 'robotwin':
-        from .robotwin_observation import RoboTwinObservationAdapter
-        observation = RoboTwinObservationAdapter(
-            norm_stats=stats,
-            tokenizer_path=options.tokenizer_path,
-            image_size=options.get('image_size', 224),
-            max_token_len=options.get('max_token_len', 200))
-    elif adapter_name == 'libero':
-        observation = LiberoObservationAdapter(
-            flux_cfg,
-            norm_stats=stats,
-            tokenizer_path=options.get('tokenizer_path'))
-    else:
-        raise ValueError(f'Unknown observation adapter: {adapter_name}')
+    observation = build_observation_adapter(flux_cfg, options, stats)
     dtype_name = options.get('compute_dtype', 'bf16')
     if dtype_name not in ('bf16', 'fp32'):
         raise ValueError('compute_dtype must be bf16 or fp32')
@@ -185,22 +159,14 @@ def _build_policy(cfg, torch_dtype, *, model_type, policy_class, horizon_key):
 
 
 def build_pi05_policy(cfg, torch_dtype=None):
-    return _build_policy(
-        cfg,
-        torch_dtype,
-        model_type='PI05FlowMatching',
-        policy_class=FluxPI05RLPolicy,
-        horizon_key='n_action_steps')
+    """Backward-compatible entrypoint; new models use build_flow_policy."""
+    if cfg.model_type != 'fluxvla_pi05':
+        raise ValueError('Expected model_type=fluxvla_pi05')
+    return build_flow_policy(cfg, torch_dtype)
 
 
 def build_smolvla_policy(cfg, torch_dtype=None):
-    from .smolvla_policy import FluxSmolVLARLPolicy
-
-    if cfg.fluxvla.get('observation_adapter', 'libero') != 'libero':
-        raise ValueError('SmolVLA RL currently supports LIBERO only')
-    return _build_policy(
-        cfg,
-        torch_dtype,
-        model_type='SmolVLAFlowMatching',
-        policy_class=FluxSmolVLARLPolicy,
-        horizon_key='chunk_size')
+    """Backward-compatible entrypoint; new models use build_flow_policy."""
+    if cfg.model_type != 'fluxvla_smolvla':
+        raise ValueError('Expected model_type=fluxvla_smolvla')
+    return build_flow_policy(cfg, torch_dtype)
