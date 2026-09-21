@@ -4,12 +4,86 @@ from contextlib import nullcontext
 
 import torch
 from rlinf.models.embodiment.base_policy import ForwardType
+from rlinf.models.embodiment.modules.value_head import ValueHead
 
 from .sampler import gaussian_entropy, gaussian_logprob, timesteps, transition
 
 
 class FlowPPOPolicyMixin:
-    """Models supply _prefix, _velocity and their native predict_action."""
+    """Flow-only PPO mechanics; native model keys are never renamed.
+
+    Subclasses declare dimensions/module paths and implement _prefix,
+    _velocity and native predict_action. Environment conversion stays in
+    observation_adapter. Non-flow policies must implement their own replay.
+    """
+
+    rl_trainable_modules = ()
+    rl_frozen_modules = ()
+
+    @property
+    def model_action_horizon(self):
+        raise NotImplementedError
+
+    @property
+    def model_action_dim(self):
+        raise NotImplementedError
+
+    @property
+    def critic_hidden_size(self):
+        raise NotImplementedError
+
+    def _configure_model_rl(self):
+        """Optional model-specific numeric alignment before critic creation."""
+
+    def configure_rl(self,
+                     observation_adapter,
+                     *,
+                     action_chunk=10,
+                     action_dim=7,
+                     noise_level=0.5,
+                     compute_dtype=torch.float32,
+                     rollout_micro_batch_size=None,
+                     value_hidden_sizes=(512, 128)):
+        if not 0 < action_chunk <= self.model_action_horizon:
+            raise ValueError('action_chunk must be within the model horizon')
+        if not 0 < action_dim <= self.model_action_dim:
+            raise ValueError('action_dim must be within the model dimension')
+        if noise_level <= 0 or not torch.isfinite(torch.tensor(noise_level)):
+            raise ValueError('PPO requires a finite, positive noise_level')
+        if compute_dtype not in (torch.float32, torch.bfloat16):
+            raise ValueError('compute_dtype must be FP32 or BF16')
+        if (rollout_micro_batch_size is not None
+                and rollout_micro_batch_size < 1):
+            raise ValueError('rollout_micro_batch_size must be positive')
+        timesteps(self.num_steps, 'cpu')
+        self.observation_adapter = observation_adapter
+        self.action_chunk = int(action_chunk)
+        self.action_env_dim = int(action_dim)
+        self.noise_level = float(noise_level)
+        self.compute_dtype = compute_dtype
+        self.rollout_micro_batch_size = rollout_micro_batch_size
+        self._configure_model_rl()
+        self.value_head = ValueHead(
+            self.critic_hidden_size,
+            hidden_sizes=value_hidden_sizes,
+            activation='relu')
+        self.requires_grad_(False)
+        for name in (*self.rl_trainable_modules, 'value_head'):
+            self.get_submodule(name).requires_grad_(True)
+        for name in self.rl_frozen_modules:
+            self.get_submodule(name).requires_grad_(False)
+        self.train(False)
+
+    def train(self, mode=True):
+        super().train(mode)
+        for name in self.rl_frozen_modules:
+            # Native constructors may call eval before all modules exist.
+            try:
+                module = self.get_submodule(name)
+            except AttributeError:
+                continue
+            module.eval()
+        return self
 
     def _network_context(self):
         # FSDP2 preserves chain/image input tensors. Autocast is local to
@@ -86,7 +160,7 @@ class FlowPPOPolicyMixin:
             return actions, result
         obs = self._prepare_obs(env_obs)
         batch = obs['states'].shape[0]
-        shape = (batch, self.n_action_steps, self.max_action_dim)
+        shape = (batch, self.model_action_horizon, self.model_action_dim)
         if noise is None:
             noise = torch.randn(
                 shape, device=self.device, dtype=torch.float32, generator=rng)

@@ -3,52 +3,40 @@
 import torch
 import torch.nn.functional as F
 from rlinf.models.embodiment.base_policy import BasePolicy
-from rlinf.models.embodiment.modules.value_head import ValueHead
 
 from fluxvla.engines.utils.model_utils import (create_sinusoidal_pos_embedding,
                                                make_att_2d_masks)
 from fluxvla.models.vlas.pi05_flowmatching import PI05FlowMatching
 from .flow_policy import FlowPPOPolicyMixin
-from .sampler import timesteps
 
 
 class FluxPI05RLPolicy(FlowPPOPolicyMixin, PI05FlowMatching, BasePolicy):
     """Preserves all Flux SFT parameter names; adds only ``value_head.*``."""
 
     _no_split_modules = ('GemmaDecoderLayer', 'SiglipEncoderLayer')
+    rl_trainable_modules = ('llm_expert', 'action_in_proj', 'action_out_proj',
+                            'time_mlp_in', 'time_mlp_out')
+    rl_frozen_modules = ('vision_backbone', 'llm_backbone', 'projector',
+                         'llm_expert.embed_tokens')
+
+    @property
+    def model_action_horizon(self):
+        return self.n_action_steps
+
+    @property
+    def model_action_dim(self):
+        return self.max_action_dim
+
+    @property
+    def critic_hidden_size(self):
+        return self.llm_backbone.config.hidden_size
 
     @property
     def config(self):
         # ConditionGemmaModel is already the backbone, without an .llm wrapper.
         return self.llm_backbone.config
 
-    def configure_rl(self,
-                     observation_adapter,
-                     *,
-                     action_chunk=10,
-                     action_dim=7,
-                     noise_level=0.5,
-                     compute_dtype=torch.float32,
-                     rollout_micro_batch_size=None,
-                     value_hidden_sizes=(512, 128)):
-        if not 0 < action_chunk <= self.n_action_steps:
-            raise ValueError(
-                'action_chunk must be within the model action horizon')
-        if not 0 < action_dim <= self.max_action_dim:
-            raise ValueError(
-                'action_dim must be within the model action dimension')
-        if noise_level <= 0 or not torch.isfinite(torch.tensor(noise_level)):
-            raise ValueError('PPO requires a finite, positive noise_level')
-        timesteps(self.num_steps, 'cpu')
-        self.observation_adapter = observation_adapter
-        self.action_chunk = int(action_chunk)
-        self.action_env_dim = int(action_dim)
-        self.noise_level = float(noise_level)
-        self.compute_dtype = compute_dtype
-        self.rollout_micro_batch_size = rollout_micro_batch_size
-        if (rollout_micro_batch_size is not None
-                and rollout_micro_batch_size < 1):
-            raise ValueError('rollout_micro_batch_size must be positive')
+    def _configure_model_rl(self):
         if self.openpi_fp32_flow:
             from .precision import (align_openpi_rope, align_openpi_vision,
                                     keep_adaptive_norm_fp32)
@@ -56,17 +44,6 @@ class FluxPI05RLPolicy(FlowPPOPolicyMixin, PI05FlowMatching, BasePolicy):
             align_openpi_vision(self.vision_backbone)
             align_openpi_rope(self.llm_backbone)
             align_openpi_rope(self.llm_expert)
-        self.value_head = ValueHead(
-            self.llm_backbone.config.hidden_size,
-            hidden_sizes=value_hidden_sizes,
-            activation='relu')
-        self.requires_grad_(False)
-        for name in ('llm_expert', 'action_in_proj', 'action_out_proj',
-                     'time_mlp_in', 'time_mlp_out', 'value_head'):
-            getattr(self, name).requires_grad_(True)
-        # The expert uses inputs_embeds; freeze its unused word embedding.
-        self.llm_expert.embed_tokens.requires_grad_(False)
-        self.train(False)
 
     def embed_suffix(self, states, noisy_actions, timestep):
         if not self.openpi_fp32_flow:
@@ -89,14 +66,6 @@ class FluxPI05RLPolicy(FlowPPOPolicyMixin, PI05FlowMatching, BasePolicy):
         attention = torch.zeros_like(mask)
         attention[:, 0] = True
         return action, mask, attention, time
-
-    def train(self, mode=True):
-        super().train(mode)
-        for name in ('vision_backbone', 'llm_backbone', 'projector'):
-            module = getattr(self, name, None)
-            if module is not None:
-                module.eval()
-        return self
 
     def _cast_gemma_input(self, tensor):
         if tensor is not None and self.openpi_fp32_flow:
