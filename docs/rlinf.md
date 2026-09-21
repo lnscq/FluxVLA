@@ -1,5 +1,8 @@
 # PI0.5 reinforcement learning with RLinf
 
+See the [extension contract](rlinf_extension.md) for reusable components,
+model-neutral names and the checklist for adding another VLA.
+
 SmolVLA also uses this backend through `fluxvla_smolvla`; see the
 [SmolVLA integration guide](rlinf_smolvla.md) for its LIBERO-10 recipe,
 model-specific FSDP constraints and validation boundaries.

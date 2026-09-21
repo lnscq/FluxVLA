@@ -1,5 +1,8 @@
 # SmolVLA reinforcement learning with RLinf
 
+The [extension contract](rlinf_extension.md) documents shared components,
+model declarations and the boundaries that remain architecture-specific.
+
 This optional frontend registers `model_type=fluxvla_smolvla` through the same
 `RLINF_EXT_MODULE=fluxvla.rl.rlinf_registry` entry as PI0.5. RLinf still owns
 PPO/GAE, environments, FSDP2, weight synchronization and checkpoints. Neither
