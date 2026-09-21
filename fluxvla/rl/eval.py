@@ -1,4 +1,4 @@
-"""Standalone held-out evaluation using RLinf's EmbodiedEvalRunner."""
+"""Standalone evaluation using RLinf's EmbodiedEvalRunner."""
 
 from .train import prepare_environment, validate_frontend_cfg
 
@@ -46,6 +46,9 @@ def run(cfg):
     runner = EmbodiedEvalRunner(cfg=cfg, **groups)
     runner.init_workers()
     runner.run()
+    # RLinf's Ray shutdown hook may mask failure exit codes. Launchers must
+    # require this positive completion signal before starting dependent jobs.
+    print('FLUXVLA_EVALUATION_COMPLETED', flush=True)
 
 
 def main():
