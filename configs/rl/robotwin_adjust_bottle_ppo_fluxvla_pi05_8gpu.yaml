@@ -1,0 +1,7 @@
+defaults:
+  - _robotwin_8gpu_base
+  - _self_
+
+hydra:
+  searchpath:
+    - file://${oc.env:RLINF_CONFIG_DIR}
