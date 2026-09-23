@@ -1,8 +1,6 @@
 """Validate the eight-GPU recipe and repeatable 100-episode monitor."""
 
 import asyncio
-import os
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,39 +14,6 @@ from fluxvla.rl.train import prepare_environment, validate_frontend_cfg
 from fluxvla.rl.workers.rollout import FluxRolloutWorker
 
 
-@pytest.mark.parametrize('completed', [False, True])
-def test_reference_gate_rejects_masked_failure(tmp_path, completed):
-    root = Path(__file__).resolve().parents[2]
-    stub = tmp_path / 'bash'
-    stub.write_text('''#!/bin/bash
-set -eu
-if [[ "$SMOLVLA_ENTRY" == eval ]]; then
-    mkdir -p "$SMOLVLA_RESULTS_ROOT/${SMOLVLA_RUN_NAME}"
-    printf '%s\\n' "$TEST_EVAL_OUTPUT" > \
-        "$SMOLVLA_RESULTS_ROOT/${SMOLVLA_RUN_NAME}/driver.log"
-else
-    touch "$SMOLVLA_RESULTS_ROOT/training_started"
-fi
-# Simulate RLinf replacing an unsuccessful exit status with zero.
-exit 0
-''')
-    stub.chmod(0o755)
-    result = subprocess.run(
-        ['/bin/bash', str(root / 'scripts/run_smolvla_rl_200.sh')],
-        env=dict(
-            os.environ,
-            PATH=str(tmp_path) + os.pathsep + os.environ['PATH'],
-            SMOLVLA_RESULTS_ROOT=str(tmp_path),
-            SMOLVLA_RUN_NAME='test',
-            TEST_EVAL_OUTPUT='FLUXVLA_EVALUATION_COMPLETED'
-            if completed else 'Traceback: reference failed'),
-        capture_output=True,
-        text=True,
-        timeout=10)
-    assert (result.returncode == 0) == completed
-    assert (tmp_path / 'training_started').exists() == completed
-
-
 @pytest.mark.parametrize('only_eval', [False, True])
 def test_backend_train_and_eval_schema(tiny_assets, monkeypatch, only_eval):
     import rlinf.config as backend
@@ -60,7 +25,7 @@ def test_backend_train_and_eval_schema(tiny_assets, monkeypatch, only_eval):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(root / 'configs/rl')):
         cfg = compose(
-            config_name='libero_10_ppo_fluxvla_smolvla_8gpu_200',
+            config_name='benchmarks/libero/smolvla/ppo_8gpu',
             overrides=[
                 f'actor.model.model_path={tiny_assets[2]}',
                 f'runner.only_eval={str(only_eval).lower()}'
@@ -84,7 +49,7 @@ def test_recipe_and_actual_libero_seed_coverage(tiny_assets):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(root / 'configs/rl')):
         cfg = compose(
-            config_name='libero_10_ppo_fluxvla_smolvla_8gpu_200',
+            config_name='benchmarks/libero/smolvla/ppo_8gpu',
             overrides=[
                 f'actor.model.model_path={tiny_assets[2]}',
                 f'actor.model.fluxvla.tokenizer_path={tiny_assets[3]}',

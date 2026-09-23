@@ -346,7 +346,7 @@ def test_robotwin_configs(evaluation, tiny_assets, monkeypatch):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(ROOT / 'configs/rl')):
         cfg = compose(
-            config_name=f'robotwin_adjust_bottle_{suffix}_fluxvla_pi05',
+            config_name=f'benchmarks/robotwin/pi05/{suffix}',
             overrides=[f'actor.model.model_path={tiny_assets[2]}'])
     OmegaConf.resolve(cfg)
     validate_frontend_cfg(cfg, evaluation=evaluation)

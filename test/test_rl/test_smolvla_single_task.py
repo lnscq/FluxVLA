@@ -23,8 +23,12 @@ def test_single_task_config_and_actual_seed_selection(tiny_assets, monkeypatch,
     with initialize_config_dir(
             version_base='1.3', config_dir=str(root / 'configs/rl')):
         cfg = compose(
-            config_name='libero_10_ppo_fluxvla_smolvla_task6',
+            config_name='benchmarks/libero/smolvla/ppo_8gpu',
             overrides=[
+                'runner.max_steps=50', 'runner.max_epochs=50',
+                'runner.save_interval=5', 'runner.val_check_interval=5',
+                '++env.train.task_id_filter=[6]',
+                '++env.eval.task_id_filter=[6]', 'env.eval.rollout_epoch=5',
                 f'actor.model.model_path={tiny_assets[2]}',
                 f'actor.model.fluxvla.tokenizer_path={tiny_assets[3]}',
                 'actor.model.fluxvla.norm_stats_path=/not-read.json',

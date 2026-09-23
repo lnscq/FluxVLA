@@ -24,8 +24,13 @@ def test_eight_gpu_config(kind, tiny_assets, monkeypatch):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(ROOT / 'configs/rl')):
         cfg = compose(
-            config_name=f'robotwin_adjust_bottle_{kind}_8gpu',
-            overrides=[f'actor.model.model_path={tiny_assets[2]}'])
+            config_name=(
+                'benchmarks/robotwin/pi05/ppo_8gpu' if kind == 'preflight' else
+                f'benchmarks/robotwin/pi05/{kind.split("_")[0]}_8gpu'),
+            overrides=[f'actor.model.model_path={tiny_assets[2]}'] + ([
+                'runner.max_steps=1', 'runner.max_epochs=1',
+                'algorithm.update_epoch=1'
+            ] if kind == 'preflight' else []))
     OmegaConf.resolve(cfg)
     validate_frontend_cfg(cfg, evaluation=bool(cfg.runner.only_eval))
     monkeypatch.setattr(backend, 'Cluster', lambda *a, **k: None)
@@ -132,12 +137,3 @@ def test_actual_accumulated_forward_is_audited(monkeypatch):
     actor.optimizer_steps = 1
     # Intentional policy changes after a real optimizer update must be allowed.
     actor.train_micro_batch(sample, {}, is_last=True)
-
-
-def test_original_sft_reuse_requires_same_evaluation_protocol(monkeypatch):
-    monkeypatch.syspath_prepend(str(ROOT / 'scripts'))
-    from run_robotwin_8gpu import verify_reused_sft_protocol
-    signature = verify_reused_sft_protocol()
-    assert signature['env']['total_num_envs'] * signature['env'][
-        'rollout_epoch'] == 150
-    assert signature['rollout_workers'] == signature['env_workers'] == 2

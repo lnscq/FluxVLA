@@ -28,7 +28,7 @@ def test_no_flat_bridge_or_experiment_modules():
             for p in RL.glob('*.py')
             } == {'__init__.py', 'train.py', 'eval.py', 'rlinf_registry.py'}
     assert (RL / 'benchmarks/libero/adapter.py').is_file()
-    assert (ROOT / 'tools/rl/robotwin/preflight.py').is_file()
+    assert (ROOT / 'scripts/rl/run.sh').is_file()
 
 
 def test_models_do_not_import_specific_benchmarks():
@@ -84,13 +84,3 @@ def test_registry_selects_benchmark_workers_and_runner():
     assert resolve_symbol(robotwin.runner_class).__name__ == 'RoboTwinRunner'
     with pytest.raises(ValueError, match='Unknown benchmark'):
         get_benchmark_spec('not_registered')
-
-
-def test_preflight_is_an_optional_tool():
-    from tools.rl.robotwin.preflight import ProbeActor, run_gate
-    assert callable(run_gate)
-    assert ProbeActor.__module__ == 'tools.rl.robotwin.preflight'
-    for path in RL.rglob('*.py'):
-        assert not any(
-            name.startswith('tools.rl')
-            for name in imported_modules(path)), path

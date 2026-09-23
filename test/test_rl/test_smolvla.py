@@ -249,7 +249,7 @@ def test_smol_loading_and_restore(smol_policy, smol_cfg, env_obs, tmp_path,
 def test_smol_config_cli_and_registration(smol_assets, phase):
     prepare_environment()
     register()
-    name = f'libero_10_{phase}_fluxvla_smolvla'
+    name = f'benchmarks/libero/smolvla/{phase}'
     overrides = [
         f'actor.model.model_path={smol_assets[2]}',
         f'actor.model.fluxvla.tokenizer_path={smol_assets[3]}',
@@ -373,7 +373,7 @@ def test_smol_gpu_fsdp(smol_cfg, tmp_path):
     result = subprocess.run([
         sys.executable, '-m', 'torch.distributed.run', '--standalone',
         '--nproc_per_node=2',
-        str(ROOT / 'scripts/smolvla_fsdp_probe.py'), '--model-config',
+        str(ROOT / 'test/test_rl/helpers/smolvla_fsdp.py'), '--model-config',
         str(config_path), '--output',
         str(tmp_path)
     ],

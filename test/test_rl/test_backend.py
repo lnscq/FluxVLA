@@ -29,7 +29,7 @@ def test_config_composes_and_backend_validation(tiny_assets, monkeypatch):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(ROOT / 'configs/rl')):
         cfg = compose(
-            config_name='libero_10_ppo_fluxvla_pi05',
+            config_name='benchmarks/libero/pi05/ppo',
             overrides=[f'actor.model.model_path={tiny_assets[2]}'])
     OmegaConf.resolve(cfg)
     validate_frontend_cfg(cfg)
@@ -294,7 +294,7 @@ def test_unsupported_configs_rejected_before_cluster(tiny_assets, key, value):
     with initialize_config_dir(
             version_base='1.3', config_dir=str(ROOT / 'configs/rl')):
         cfg = compose(
-            config_name='libero_10_ppo_fluxvla_pi05',
+            config_name='benchmarks/libero/pi05/ppo',
             overrides=[f'actor.model.model_path={tiny_assets[2]}'])
     OmegaConf.update(cfg, key, value)
     with pytest.raises(ValueError):
