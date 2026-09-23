@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # OIDN 2.3.3 is the first release with NVIDIA Blackwell support.
 set -euo pipefail
-RL_ROOT=${FLUX_ROBOTWIN_ROOT:-/mnt/data/cpfs/users/danny/fluxvla_robotwin_rl}
+RL_SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+RL_ROOT=${FLUX_ROBOTWIN_ROOT:-$RL_SOURCE/work_dirs/robotwin}
 OIDN_ARCHIVE="$RL_ROOT/assets/oidn-2.3.3.x86_64.linux.tar.gz"
 mkdir -p "$RL_ROOT/src" "$RL_ROOT/assets"
 if [[ ! -f "$OIDN_ARCHIVE" ]]; then

@@ -12,7 +12,7 @@ import requests
 
 
 def main():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     artifacts = Path(
         os.environ.get('SMOLVLA_ARTIFACT_ROOT',
                        root / 'work_dirs/rlinf-smolvla'))

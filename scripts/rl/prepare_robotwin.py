@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare resources in tmux without using the GPU experiment budget."""
+"""Prepare RoboTwin weights, assets and deterministic train/eval splits."""
 
 import argparse
 import hashlib
@@ -26,9 +26,9 @@ def tokenizer(dest):
     if target.exists() and hashlib.sha256(
             target.read_bytes()).hexdigest() == expected:
         return
-    # The public GCS URL currently resolves through a broken accelerator in
-    # this machine. Keep TLS verification on and use the public byte mirror.
-    source = ('https://hf-mirror.com/leo009/paligemma_tokenizer.model/'
+    # The public byte mirror is verified against the original tokenizer hash.
+    endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
+    source = (f'{endpoint}/leo009/paligemma_tokenizer.model/'
               'resolve/main/paligemma_tokenizer.model')
     content = fetch(source, target)
     actual = hashlib.sha256(content).hexdigest()
@@ -43,14 +43,14 @@ def tokenizer(dest):
                 source,
                 'sha256':
                 actual,
-                'reason': ('GCS TLS hostname mismatch; '
-                           'public mirror pinned by content hash')
+                'reason':
+                'Public mirror pinned by content hash'
             },
             indent=2) + '\n')
 
 
 def weights(root):
-    endpoint = os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')
+    endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     dest = root / 'weights' / REPO.split('/')[-1]
     info = json.loads(
         fetch(f'{endpoint}/api/models/{REPO}', dest / 'repo.json'))
@@ -151,7 +151,7 @@ def checkout(root):
 
 def assets(root):
     import zipfile
-    endpoint = os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')
+    endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     repo = 'TianxingChen/RoboTwin2.0'
     dest = root / 'assets'
     info = json.loads(
@@ -211,7 +211,7 @@ def protocol(root):
     import random
     backend_root = Path(
         os.environ.get('RLINF_ROOT',
-                       Path(__file__).resolve().parents[2] / 'RLinf'))
+                       Path(__file__).resolve().parents[3] / 'RLinf'))
     backend = backend_root / 'rlinf/envs/robotwin/seeds'
     task = 'adjust_bottle'
     train = json.loads(
@@ -246,7 +246,7 @@ def protocol(root):
 
 
 def metadata(root):
-    endpoint = os.environ.get('HF_ENDPOINT', 'https://hf-mirror.com')
+    endpoint = os.environ.get('HF_ENDPOINT', 'https://huggingface.co')
     dest = root / 'weights' / REPO.split('/')[-1]
     info = json.loads((dest / 'repo.json').read_text())
     revision = info['sha']
@@ -265,7 +265,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '--root',
         type=Path,
-        default=Path('/mnt/data/cpfs/users/danny/fluxvla_robotwin_rl'))
+        default=Path(
+            os.environ.get(
+                'FLUX_ROBOTWIN_ROOT',
+                Path(__file__).resolve().parents[2] / 'work_dirs/robotwin')))
     args = parser.parse_args()
     args.root.mkdir(parents=True, exist_ok=True)
     globals()[args.stage](args.root)
