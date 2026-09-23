@@ -1,5 +1,7 @@
+# @package _global_
+
 defaults:
-  - _robotwin_ppo_base
+  - /benchmarks/robotwin/pi05/base_8gpu
   - _self_
 
 hydra:
@@ -8,14 +10,16 @@ hydra:
 
 experiment:
   split: test
+
 rollout:
-  # Current RLinf only_eval reads the full rollout model, not actor.model.
   model: ${actor.model}
+
 runner:
   only_eval: true
   logger:
-    experiment_name: adjust_bottle_sft_test
+    experiment_name: adjust_bottle_8gpu_sft_test
     logger_backends: [tensorboard]
+
 env:
   eval:
     total_num_envs: 10

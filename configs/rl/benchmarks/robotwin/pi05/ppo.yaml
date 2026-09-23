@@ -1,5 +1,7 @@
+# @package _global_
+
 defaults:
-  - _robotwin_8gpu_base
+  - /benchmarks/robotwin/pi05/base
   - _self_
 
 hydra:

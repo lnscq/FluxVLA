@@ -1,9 +1,10 @@
+# @package _global_
+
 defaults:
-  - _robotwin_ppo_base
+  - /benchmarks/robotwin/pi05/base
   - _self_
 
 experiment:
-  gate_name: eight_gpu_v1
   memory_audit: true
   # Measured four-batch rollout takes about five minutes; also leave time
   # for actor update, validation and a durable checkpoint before the cutoff.

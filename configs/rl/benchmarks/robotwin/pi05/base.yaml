@@ -1,15 +1,16 @@
+# @package _global_
+
 defaults:
-  - _ppo_base
-  - override /env@env.train: robotwin_adjust_bottle
-  - override /env@env.eval: robotwin_adjust_bottle
+  - /env@env.train: robotwin_adjust_bottle
+  - /env@env.eval: robotwin_adjust_bottle
+  - /base/ppo
+  - /models@actor.model: pi05
+  - /backends/fsdp@actor.fsdp_config: pi05
   - _self_
 
 experiment:
-  root: ${oc.env:FLUX_ROBOTWIN_ROOT,/mnt/data/cpfs/users/danny/fluxvla_robotwin_rl}
+  root: ${oc.env:FLUX_ROBOTWIN_ROOT,${oc.env:FLUXVLA_ROOT}/work_dirs/robotwin}
   split: validation
-  reference: "RLinf public PI05: SFT 85.94%, PPO 96.09%; not FluxVLA results"
-  checkpoint_metadata_horizon: 10
-  evaluation_code_horizon: 50
   placement:
     actor: 0-1
     env,rollout: 2-3
@@ -43,7 +44,7 @@ actor:
     num_steps: 5
     fluxvla:
       observation_adapter: robotwin
-      config_path: ${oc.env:FLUXVLA_ROOT}/configs/rl/model/pi05_robotwin.py
+      config_path: ${oc.env:FLUXVLA_ROOT}/configs/rl/models/pi05/robotwin.py
       action_horizon: 50
       image_size: 224
       max_token_len: 200

@@ -1,10 +1,9 @@
+# @package _global_
+
 defaults:
-  - env@env.train: libero_10
-  - env@env.eval: libero_10
-  - model@actor.model: fluxvla_pi05
-  - hybrid_engines/fsdp@actor.fsdp_config
-  - weight_syncer/bucket_syncer@weight_syncer
-  - override hydra/job_logging: stdout
+  - /hybrid_engines/fsdp@actor.fsdp_config
+  - /weight_syncer/bucket_syncer@weight_syncer
+  - override /hydra/job_logging: stdout
   - _self_
 
 hydra:
@@ -24,7 +23,6 @@ runner:
   logger:
     log_path: ${oc.env:FLUXVLA_ROOT}/work_dirs/rlinf
     project_name: fluxvla_rl
-    experiment_name: libero_10_ppo_fluxvla_pi05
     logger_backends: [tensorboard]
   max_epochs: 1000
   max_steps: 1000
@@ -66,16 +64,12 @@ env:
   train:
     rollout_epoch: 1
     total_num_envs: 16
-    max_episode_steps: 480
-    max_steps_per_rollout_epoch: 480
     reward_coef: ${algorithm.reward_coef}
     video_cfg:
       save_video: false
   eval:
     rollout_epoch: 1
     total_num_envs: 16
-    max_episode_steps: 480
-    max_steps_per_rollout_epoch: 480
     auto_reset: true
     ignore_terminations: true
     is_eval: true
@@ -122,9 +116,6 @@ actor:
     sharding_strategy: full_shard
     use_orig_params: true
     gradient_checkpointing: false
-    wrap_policy:
-      transformer_layer_cls_to_wrap: [GemmaDecoderLayer, SiglipEncoderLayer]
-      module_classes_to_wrap: [LinearProjector, ValueHead]
     mixed_precision:
       # Autocast inside the policy supplies BF16 matmul/conv compute. Keep
       # gathered parameters FP32 too, matching rollout's embeddings/norms.

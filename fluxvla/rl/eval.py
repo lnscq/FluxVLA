@@ -66,7 +66,7 @@ def main():
     @hydra.main(
         version_base='1.3',
         config_path=str(root / 'configs/rl'),
-        config_name='robotwin_adjust_bottle_eval_fluxvla_pi05')
+        config_name='benchmarks/robotwin/pi05/eval')
     def launch(cfg):
         run(cfg)
 

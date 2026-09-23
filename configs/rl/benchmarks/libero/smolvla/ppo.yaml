@@ -1,5 +1,7 @@
+# @package _global_
+
 defaults:
-  - _ppo_base
+  - /benchmarks/libero/smolvla/base
   - _self_
 
 hydra:

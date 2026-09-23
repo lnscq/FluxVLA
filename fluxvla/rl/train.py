@@ -137,7 +137,7 @@ def main():
     @hydra.main(
         version_base='1.3',
         config_path=str(root / 'configs/rl'),
-        config_name='libero_10_ppo_fluxvla_pi05')
+        config_name='benchmarks/libero/pi05/ppo')
     def launch(cfg):
         run(cfg)
 

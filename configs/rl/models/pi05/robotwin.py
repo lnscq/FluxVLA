@@ -1,5 +1,5 @@
 """Same Flux PI0.5 parameter layout; reference OpenPI FP32 flow projections."""
-_base_ = '../../pi05/pi05_paligemma_libero_10_full_finetune.py'
+_base_ = '../../../pi05/pi05_paligemma_libero_10_full_finetune.py'
 
 model = dict(
     n_action_steps=50,

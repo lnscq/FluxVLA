@@ -1,6 +1,7 @@
-# Longer mixed-task control: retain the 200-round optimizer/data recipe.
+# @package _global_
+
 defaults:
-  - _smolvla_ppo_base
+  - /benchmarks/libero/smolvla/base
   - _self_
 
 hydra:
@@ -20,14 +21,14 @@ cluster:
   component_placement: ${experiment.placement}
 
 runner:
-  max_epochs: 1000
-  max_steps: 1000
-  save_interval: 25
-  val_check_interval: 25
+  max_epochs: 200
+  max_steps: 200
+  save_interval: 10
+  val_check_interval: 10
   resume_dir: null
   logger:
+    experiment_name: smolvla_libero10_8gpu_200
     project_name: fluxvla-rl-smolvla
-    experiment_name: smolvla_libero10_8gpu_1000
     logger_backends: [wandb]
 
 algorithm:
