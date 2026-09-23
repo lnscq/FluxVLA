@@ -51,19 +51,24 @@ MMEngine 配方为 `configs/smolvla/smolvla_libero_10_finetune.py`。
 tmux new -s smolvla-rl
 # 在新 shell 中激活 RL 环境，进入仓库并设置总览中的环境变量。
 export SMOLVLA_ARTIFACT_ROOT=/absolute/path/rlinf-smolvla
-python scripts/prepare_smolvla_rl.py
-MUJOCO_GL=egl PYOPENGL_PLATFORM=egl \
-  python scripts/smolvla_libero_tools/rl/robotwin/preflight.py --policy
+python scripts/rl/prepare_smolvla.py
 ```
 
 下载工具固定 SFT revision 和校验值；`--endpoint` 可显式选择镜像。未指定资源
-根目录时默认写入仓库 `work_dirs/rlinf-smolvla`。preflight 用完整 SFT 验证真实
-环境 reset、动作、概率复算与 chunk step，不是成功率评测。
+根目录时默认写入仓库 `work_dirs/rlinf-smolvla`。准备完成后设置通用启动器资源：
+
+```bash
+smolvla_bundle="$SMOLVLA_ARTIFACT_ROOT/weights/FluxVLA-SmolVLA-LIBERO10"
+export FLUX_RL_MODEL_PATH="$smolvla_bundle/checkpoints/step-057096-epoch-36-loss=0.2340.safetensors"
+export FLUX_RL_TOKENIZER_PATH="$smolvla_bundle/tokenizer"
+export FLUX_RL_STATS_PATH="$smolvla_bundle/dataset_statistics.json"
+bash scripts/rl/run.sh train benchmarks/libero/smolvla/ppo_8gpu
+```
 
 已有文件时可直接使用 module 入口：
 
 ```bash
-python -m fluxvla.rl.train --config-name=libero_10_ppo_fluxvla_smolvla \
+python -m fluxvla.rl.train --config-name=benchmarks/libero/smolvla/ppo \
   actor.model.model_path=/absolute/path/sft.safetensors \
   actor.model.fluxvla.tokenizer_path=/absolute/path/tokenizer \
   actor.model.fluxvla.norm_stats_path=/absolute/path/dataset_statistics.json \
@@ -71,30 +76,23 @@ python -m fluxvla.rl.train --config-name=libero_10_ppo_fluxvla_smolvla \
   'runner.logger.logger_backends=[wandb]'
 ```
 
-追加 `--cfg job --resolve` 仅解析配置。含 `=` 或空格的路径须按 Hydra 规则
-给值加引号；下列 launcher 已处理这种引用。
+追加 `--cfg job --resolve` 仅解析配置。通用启动器会正确引用资源环境变量中
+包含空格或 `=` 的路径。无需为特定训练轮数或单任务另建配置：
 
-| 脚本                                    | 配方 / 流程                                              |
-| --------------------------------------- | -------------------------------------------------------- |
-| `scripts/run_smolvla_rl_smoke.sh`       | 四卡、5 轮，概率/梯度审计，每轮保存评测                  |
-| `scripts/run_smolvla_rl_200.sh`         | 八卡混合任务：SFT 基线通过后，从原始 SFT 开始 200 轮 PPO |
-| `scripts/run_smolvla_rl_single_task.sh` | 八卡 task 6：SFT 基线 → 50 轮 PPO → 独立恢复评测         |
+```bash
+bash scripts/rl/run.sh train benchmarks/libero/smolvla/ppo_8gpu \
+  runner.max_epochs=1000 runner.max_steps=1000 \
+  runner.save_interval=25 runner.val_check_interval=25
+```
 
-三个脚本均须在 tmux 内运行，已有 `WANDB_API_KEY` 才能启动；不创建看门狗，
-不覆盖已有目录。200 轮指 runner 外层轮次，不是 optimizer step。
 八卡配方 actor 0–3、rollout 4–5、环境 6–7，32 个训练环境、global batch 128、
 microbatch 2、update epoch 2、actor LR `1e-6`、value LR `1e-4`；不是最优超参。
-
-`FLUX_RL_PYTHON` 选择解释器；`SMOLVLA_BUNDLE_DIR` 指定成套资源，
-`SMOLVLA_SFT_PATH`、`SMOLVLA_TOKENIZER_PATH`、`SMOLVLA_STATS_PATH` 分别覆盖文件，
-`SMOLVLA_RESULTS_ROOT` 指定结果目录，`SMOLVLA_RUN_NAME` 指定独立运行名。
-四卡 smoke 脚本需显式提供三个文件路径，其余两脚本会从 bundle 推导。
-不要在同一 Ray 实例并发运行多实验。
+轮数指 runner 外层轮次，不是 optimizer step。正式训练需已有 `WANDB_API_KEY`。
 
 ## 独立评测与验收
 
 ```bash
-python -m fluxvla.rl.eval --config-name=libero_10_eval_fluxvla_smolvla \
+python -m fluxvla.rl.eval --config-name=benchmarks/libero/smolvla/eval \
   actor.model.model_path=/absolute/path/sft.safetensors \
   actor.model.fluxvla.tokenizer_path=/absolute/path/tokenizer \
   actor.model.fluxvla.norm_stats_path=/absolute/path/dataset_statistics.json \
@@ -104,14 +102,12 @@ python -m fluxvla.rl.eval --config-name=libero_10_eval_fluxvla_smolvla \
 
 省略 `runner.ckpt_path` 则评测初始 SFT；续训设置 `runner.resume_dir`。
 `rollout.model` 完整引用 `actor.model`，保证 eval-only workers 使用相同配置。
-串行 launcher 同时检查 `FLUXVLA_EVALUATION_COMPLETED` 完成标志，避免 RLinf/Ray
-清理掩盖失败退出码后仍启动后续阶段。
+评测成功结束时输出 `FLUXVLA_EVALUATION_COMPLETED`；自动化串联任务时应检查
+此标志，避免 RLinf/Ray 清理掩盖失败退出码后仍启动后续阶段。
 
 原生预处理/cache/velocity/ODE 一致性、PPO 复算、冻结、trajectory、bootstrap、
 严格加载和恢复均在 `test/test_rl/` 验证；命令与最新结果见总览。
 八卡真实采样/训练/同步曾运行，双卡 FSDP2 更新与恢复也已测试。
 
-现有混合任务 PPO 曾出现退化，单任务改善不代表稳定收敛；这些 launcher 的
-固定 monitor 初始状态与训练池重叠，不能据此宣称 held-out 涨点。
-默认独立评测也不自动构成配对协议：正式对照需固定任务、seed、布局及 checkpoint
-选择规则，并检查恢复评测与训练内评测是否一致。
+默认评测不自动构成严格的 held-out 配对协议。正式对照需固定任务、episode/noise
+seeds、布局及 checkpoint 选择规则，并检查恢复评测与训练内评测是否一致。

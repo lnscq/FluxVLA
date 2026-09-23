@@ -77,17 +77,10 @@ in `models/registry.py`. New combinations require validation, not just a new
 registration entry.
 
 RoboTwin's recorder and protocol-aware runner belong to its benchmark package.
-The real-worker diagnostic entrypoint is `tools.rl.robotwin.preflight`;
-production modules never import this optional tool. Train/eval CLI names and
-state-dict keys are unchanged, but old internal `bridge` imports are removed.
-
-The model/benchmark layout on branch `rlinf`, based on main `b7042d2`, passed
-118 tests with one skipped in 125.93 seconds on 2026-09-22. The skipped test
-is the opt-in two-GPU FSDP2 probe: the existing eight-GPU training job was
-left running in its original worktree. This migration did not rerun a real
-environment training job or distributed GPU validation. The test environment
-reuses three ignored compiled CUDA extensions with unchanged sources; no
-binaries or experiment artifacts are included in the branch.
+User launch and resource tools live under `scripts/rl/`; internal diagnostic
+and historical experiment scripts are not shipped. Train/eval module names
+and state-dict keys are unchanged, but old internal `bridge` imports and
+flat config names are removed. See the main guide for current launch paths.
 
 1. Add a thin policy inheriting `FlowPPOPolicyMixin`, its native Flux model,
    and RLinf `BasePolicy`. Implement the properties/hooks and declare module
@@ -130,10 +123,5 @@ The toy test covers rollout/replay, native eval, gradients and freezing;
 it is a contract test, not evidence of a third production model integration.
 Run it together with all existing PI0.5/SmolVLA tests before publishing.
 
-Before the model/benchmark directory migration, the 2026-09-22 regression
-passed **107 tests, 22 warnings in
-133.82 seconds**, with `RUN_SMOLVLA_GPU_PROBE=1` and two visible GPUs. This
-includes the real two-rank FSDP2 update/checkpoint probe. A separate full-SFT
-LIBERO reset/action-chunk preflight passed, with pre-update replay drift
-**0.0**. These checks validate this refactor, not unimplemented VLA families
-or improved benchmark performance.
+GPU and simulator validation must be repeated on the target environment;
+passing interface tests is not evidence of improved benchmark performance.

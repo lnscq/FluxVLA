@@ -51,7 +51,7 @@ MMEngine 配方为 `configs/pi05/pi05_paligemma_libero_10_full_finetune.py`。
 在 tmux 内激活 RL 环境，从仓库根目录执行：
 
 ```bash
-python -m fluxvla.rl.train --config-name=libero_10_ppo_fluxvla_pi05 \
+python -m fluxvla.rl.train --config-name=benchmarks/libero/pi05/ppo \
   actor.model.model_path=/absolute/path/sft.safetensors \
   actor.model.fluxvla.tokenizer_path=/absolute/path/tokenizer.model \
   actor.model.fluxvla.norm_stats_path=/absolute/path/dataset_statistics.json \
@@ -68,22 +68,28 @@ LIBERO 原生推理对齐/PPO 接口已经测试，但 PI0.5 LIBERO 大模型训
 
 需要 RoboTwin `RLinf_support` 源码、资产、任务 seeds，以及
 `RLinf/RLinf-Pi05-RoboTwin-SFT-adjust_bottle` 的完整权重、统计和 tokenizer。
-准备工具为 `scripts/prepare_robotwin_rl.py`；依赖工具为
-`setup_robotwin_rl_env.sh`、`setup_openpi_reference_env.sh`、`setup_robotwin_oidn.sh`。
-这些脚本含原机器 overlay/CUDA 假设，应先检查路径和版本，不是通用一键安装器。
+资源准备工具为 `scripts/rl/prepare_robotwin.py`。先在独立环境中按 RLinf/RoboTwin
+官方安装说明安装模拟器依赖（包括 SAPIEN、mplib、渲染和规划库）；不要安装
+RLinf 的 `embodied` extra，以免覆盖本链路要求的 Transformers 版本。
+仓库不自动修改系统库或其他虚拟环境。Blackwell 的 OIDN 兼容库可选用
+`scripts/rl/setup_robotwin_oidn.sh` 下载；该工具需要 `aria2c`、`tar` 和 `sha256sum`。
 
 ```bash
 export FLUX_ROBOTWIN_ROOT=/absolute/path/robotwin_experiment
 export RLINF_ROOT=/absolute/path/RLinf
-source scripts/robotwin_rl_env.sh
+python scripts/rl/prepare_robotwin.py checkout --root "$FLUX_ROBOTWIN_ROOT"
+python scripts/rl/prepare_robotwin.py assets --root "$FLUX_ROBOTWIN_ROOT"
+python scripts/rl/prepare_robotwin.py weights --root "$FLUX_ROBOTWIN_ROOT"
+python scripts/rl/prepare_robotwin.py protocol --root "$FLUX_ROBOTWIN_ROOT"
+source scripts/rl/robotwin_env.sh
 
 # 环境/模型/GPU 门禁通过后，在 tmux 内启动。
 python -m fluxvla.rl.train \
-  --config-name=robotwin_adjust_bottle_ppo_fluxvla_pi05_8gpu \
+  --config-name=benchmarks/robotwin/pi05/ppo_8gpu \
   runner.logger.experiment_name=pi05_robotwin_run
 
 python -m fluxvla.rl.eval \
-  --config-name=robotwin_adjust_bottle_eval_fluxvla_pi05_8gpu \
+  --config-name=benchmarks/robotwin/pi05/eval_8gpu \
   runner.ckpt_path=/absolute/path/checkpoints/global_step_30 \
   runner.logger.experiment_name=pi05_robotwin_eval
 ```
@@ -93,15 +99,16 @@ python -m fluxvla.rl.eval \
 八卡配方 actor 0–3、rollout 4–5、环境 6–7；不是四卡配方的同批量复制，
 轮数、global batch、学习率和采样量应查看解析后的配置。
 
-上线前用 `robotwin_parity.py` 在隔离 OpenPI/Flux 环境中对齐预处理、velocity、ODE，
-再检查 `robotwin_env_probe.py`、`robotwin_fsdp_probe.py` 及 `tools.rl.robotwin.preflight`。
-训练 rollout 与 actor 的计算 microbatch 必须一致，以控制 BF16 的 batch-shape
+通用入口也支持 RoboTwin，并自动加载环境辅助脚本：
+
+```bash
+bash scripts/rl/run.sh train benchmarks/robotwin/pi05/ppo_8gpu
+bash scripts/rl/run.sh eval benchmarks/robotwin/pi05/eval_8gpu \
+  runner.ckpt_path=/absolute/path/checkpoints/global_step_30
+```
+
+训练 rollout 与 actor 的计算 microbatch 必须一致，以控制 BF16 batch-shape
 概率漂移。八卡配方关闭 FSDP 延迟梯度同步，但保留优化器 global batch 累积；
 这是当前 Torch 2.8/FSDP2 栈的实测规避配置，不应随意删掉。
-
-历史 `run_robotwin_8gpu.py`、`run_robotwin_final_eval.py`、`run_robotwin_demos.py`
-绑定门禁、源码哈希和运行目录，不是通用启动入口。新实验优先使用 module 入口，
-重新验收门禁，不绕过旧哈希检查。
-默认 chunk 边界视频不是完整动作录像；独立评测可用
-`env.eval.video_cfg.save_video=false` 和
-`+env.eval.full_video_dir=/absolute/path/new_demo_directory` 录制完整 demo。
+本次整理未在新机器重新验证模拟器、分布式训练或成功率；上线前应先用少量环境
+和较短轮数验证，不能把接口测试结果等同于 GPU/模拟器验收。

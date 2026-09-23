@@ -10,6 +10,48 @@ FSDP2、权重同步及 checkpoint。actor 和 rollout 在各自进程内构建�
 - [SmolVLA 接入](rlinf_smolvla.md)：LIBERO-10 适配、FSDP 差异及启动。
 - [扩展接口约定](rlinf_extension.md)：公共组件、变量命名及新增 VLA 的最小改动。
 
+## 快速使用
+
+先按 FluxVLA README 安装并编译模型依赖，再按下方“依赖与环境”安装 RLinf 核心包。
+LIBERO 或 RoboTwin 的模拟器依赖和资产须按对应项目文档准备；不能仅安装 RLinf
+核心包就假定模拟器可用。仓库不再提供依赖本机旧虚拟环境的 overlay 安装脚本。
+
+用户工具集中在 `scripts/rl/`：权重/资产准备，以及一个通用训练和评测启动器。
+不包含内部 probe、preflight、历史轮数实验、录像复盘或预算管理脚本。
+
+```bash
+export RLINF_ROOT=/absolute/path/RLinf
+# 先激活已安装 FluxVLA/RLinf 和 benchmark 依赖的环境。
+tmux new -s fluxvla-rl
+# 在 tmux 中进入 FluxVLA 仓库，设置匹配的模型资源：
+export FLUX_RL_MODEL_PATH=/absolute/path/sft.safetensors
+export FLUX_RL_TOKENIZER_PATH=/absolute/path/tokenizer
+export FLUX_RL_STATS_PATH=/absolute/path/dataset_statistics.json
+
+# 只解析配置；不启动训练、Ray 或模拟器。
+bash scripts/rl/run.sh train benchmarks/libero/smolvla/ppo_8gpu \
+  --cfg job --resolve
+
+# 正式训练；八卡 SmolVLA 配方使用 W&B，需要环境中已有 WANDB_API_KEY。
+bash scripts/rl/run.sh train benchmarks/libero/smolvla/ppo_8gpu
+
+# 同一配方、同一资源评测初始 SFT；不指定 runner.ckpt_path。
+bash scripts/rl/run.sh eval benchmarks/libero/smolvla/ppo_8gpu
+
+# 续训与独立评测分别使用不同字段。
+bash scripts/rl/run.sh train benchmarks/libero/smolvla/ppo_8gpu \
+  runner.resume_dir=/absolute/path/checkpoints/global_step_200
+bash scripts/rl/run.sh eval benchmarks/libero/smolvla/ppo_8gpu \
+  runner.ckpt_path=/absolute/path/checkpoints/global_step_200
+```
+
+`run.sh` 设置源码搜索路径、无头渲染环境及唯一运行名；RoboTwin 配方会自动加载
+其环境辅助脚本。实际运行要求 tmux，`--cfg`/`--help` 允许在普通终端使用。
+它不下载资产、不安装软件、不自动启动多个实验，也不存储或打印认证信息。
+可用 `FLUX_RL_PYTHON` 指定解释器，`FLUX_RL_RESULTS_ROOT` 指定结果根目录，
+`FLUX_RL_RUN_NAME` 指定运行名。命令行 Hydra overrides 优先于这些环境变量。
+同一 Ray 实例不要并发运行多个实验。
+
 ## 公共组件与数据流
 
 代码按模型和 benchmark 分开归档，不再使用混合职责的 `bridge/`：
@@ -28,15 +70,19 @@ fluxvla/rl/
 │   └── robotwin/             # adapter、环境/runtime、worker、协议、runner、录像
 ├── workers/                  # 共用 actor、rollout、env 扩展
 └── utils/                    # 日志认证、延迟导入、Tensor 转换
-
-tools/rl/robotwin/preflight.py # 可选多卡诊断，不由训练包导入
 ```
 
 `models/` 不导入具体 benchmark；模型构建器只通过 benchmark 注册表获取 adapter。
 LIBERO 与 RoboTwin 的 adapter 不互相导入。benchmark 专属模拟器与 runner 延迟加载，
 使用 LIBERO 时不会因注册表而强制加载 RoboTwin/SAPIEN。
-`train.py`、`eval.py`、RLinf 外部注册名和原有配置名保持不变；旧内部 Python import
-路径不再保留兼容空壳，脚本、测试和文档均已迁到新路径。模型 state-dict key 不变。
+`train.py`、`eval.py` 和 RLinf 外部注册名保持不变；配置名改为按用途分层的路径，
+如 `benchmarks/libero/smolvla/ppo`。旧内部 Python import 和旧平铺配置名
+不再保留兼容空壳，脚本、测试和文档均已迁到新路径。模型 state-dict key 不变。
+
+配置分为 `base/`、`models/`、`backends/`、`benchmarks/` 和 `runtime/`。
+只保留代表性训练/评测与八卡配方；smoke、preflight、特定轮数和 task6
+不另存 YAML，由启动参数或测试内覆盖表达。
+完整目录职责与迁移方式见 [RL 配置说明](../configs/rl/README.md)。
 
 | 文件                                             | 职责                                                         |
 | ------------------------------------------------ | ------------------------------------------------------------ |
@@ -128,10 +174,9 @@ CUDA_VISIBLE_DEVICES=0,1 RUN_SMOLVLA_GPU_PROBE=1 \
   python -m pytest test/test_rl -q
 ```
 
-2026-09-22 重构后 107 项测试通过，含真实双卡 SmolVLA FSDP2 更新和恢复；
-完整 SFT 的真实 LIBERO reset/action-chunk 短跑通过，概率复算误差为 0。
-PI0.5 的 RoboTwin 多卡训练、通信与恢复此前已实际运行，不等同于 PI0.5 LIBERO
-或其他模型/环境组合均已实测；未执行多机验收。
+接口测试覆盖原生 ODE 对齐、PPO 概率复算、冻结参数、权重恢复和配置解析。
+真实分布式 GPU、模拟器和成功率需要在目标机器上分别验收；本次发布整理
+没有重新执行大模型训练或完整基准评测。
 
 接口正确不代表收敛或涨点。现有超参是接入配方，不是最优方案；成功率对照必须
 固定初始权重、任务、episode/noise seeds 和评测布局，不得用测试集挑 checkpoint。
