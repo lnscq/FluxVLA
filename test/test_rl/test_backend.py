@@ -60,6 +60,10 @@ from rlinf.models import _MODEL_REGISTRY
 from rlinf.config import SupportedModel, EMBODIED_MODEL
 assert "fluxvla_pi05" in _MODEL_REGISTRY
 assert SupportedModel("fluxvla_pi05") in EMBODIED_MODEL
+from hydra.core.config_store import ConfigStore
+store = ConfigStore.instance()
+assert store.load('models/pi05.yaml').node.model_type == 'fluxvla_pi05'
+assert store.load('models/smolvla.yaml').node.model_type == 'fluxvla_smolvla'
 '''
     env = dict(os.environ, RLINF_EXT_MODULE='fluxvla.rl.rlinf_registry')
     result = subprocess.run([sys.executable, '-B', '-c', code],

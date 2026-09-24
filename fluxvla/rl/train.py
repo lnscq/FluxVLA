@@ -11,6 +11,8 @@ from fluxvla.rl.utils.imports import resolve_symbol
 
 def prepare_environment():
     """Expose absolute config locations to Hydra and the extension to Ray."""
+    from fluxvla.rl.utils.config import register_model_configs
+
     flux_root = Path(__file__).resolve().parents[2]
     spec = importlib.util.find_spec('rlinf')
     if spec is None or spec.origin is None:
@@ -37,6 +39,7 @@ def prepare_environment():
             f'Conflicting RLINF_EXT_MODULE={existing}. Expected {extension}')
     os.environ['RLINF_EXT_MODULE'] = extension
     os.environ['FLUX_RL_EXTERNAL_DISTRIBUTED'] = '1'
+    register_model_configs()
     return flux_root
 
 

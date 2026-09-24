@@ -26,6 +26,9 @@ def register():
     """Idempotently register the external policy in the current process."""
     from rlinf.models import register_model
 
+    from fluxvla.rl.utils.config import register_model_configs
+
+    register_model_configs()
     for model_type in POLICY_SPECS:
         register_model(
             model_type,

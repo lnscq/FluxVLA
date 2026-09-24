@@ -80,6 +80,9 @@ LIBERO 与 RoboTwin 的 adapter 不互相导入。benchmark 专属模拟器与 r
 不再保留兼容空壳，脚本、测试和文档均已迁到新路径。模型 state-dict key 不变。
 
 配置分为 `base/`、`models/`、`backends/`、`benchmarks/` 和 `runtime/`。
+`models/pi05.py` 和 `models/smolvla.py` 用 Python 字典管理模型默认值，
+由入口注册到 Hydra ConfigStore；模型选择名和 `actor.model.*` 命令行覆盖不变。
+其余 PPO、环境和 FSDP 配方继续使用 YAML。
 只保留代表性训练/评测与八卡配方；smoke、preflight、特定轮数和 task6
 不另存 YAML，由启动参数或测试内覆盖表达。
 完整目录职责与迁移方式见 [RL 配置说明](../configs/rl/README.md)。

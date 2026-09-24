@@ -6,7 +6,7 @@ Run commands from the repository root. Hydra's config root remains
 | Directory              | Responsibility                                                                        |
 | ---------------------- | ------------------------------------------------------------------------------------- |
 | `base/`                | Shared PPO, worker, optimizer and precision defaults; no benchmark or model selection |
-| `models/`              | Policy construction, native model config references and model overrides               |
+| `models/`              | Python model defaults, native model config references and model overrides             |
 | `backends/fsdp/`       | Model-specific FSDP wrapping rules                                                    |
 | `benchmarks/libero/`   | LIBERO environment defaults and PI0.5/SmolVLA train/eval recipes                      |
 | `benchmarks/robotwin/` | RoboTwin task protocol and PI0.5 train/eval recipes                                   |
@@ -60,14 +60,28 @@ experiment and diagnostic launch scripts are not part of the user package.
 
 ## Composition and migration
 
+- Model defaults are Python files: `models/pi05.py` and `models/smolvla.py`.
+  Each defines a `model = dict(...)`; no model YAML files are required.
+  The RL entrypoints register these dictionaries with Hydra ConfigStore
+  before composition. Ray's extension registration uses the same helper.
+- Config group names remain `models/pi05` and `models/smolvla`, so existing
+  defaults lists and `actor.model.*` CLI overrides do not change. Values such
+  as `'???'` and `'${actor.micro_batch_size}'` retain OmegaConf semantics.
+- Add future RL model defaults as top-level `models/<name>.py` files with
+  a `model` dictionary. Nested Python files such as `models/pi05/robotwin.py`
+  are native MMEngine overrides and are not registered as Hydra defaults.
+  Native network configurations referenced by `fluxvla.config_path` remain
+  separate from the RL model defaults.
+- When composing configs directly in Python, call
+  `fluxvla.rl.train.prepare_environment()` before `hydra.compose()`.
 - Recipe YAML files use `# @package _global_` and absolute defaults paths,
   so directory names do not become new keys in RLinf's configuration.
 - Model and FSDP fragments are placed explicitly at `actor.model` and
   `actor.fsdp_config`. Do not add `_global_` to these fragments.
 - The selected primary recipe declares the RLinf Hydra search path.
   Include shared bases, not other primary recipes with a search path.
-- Benchmark configs must not depend on other benchmarks. Add a new YAML
-  only for a reusable model, backend or benchmark recipe, not a test run.
+- Benchmark configs must not depend on other benchmarks. YAML is retained
+  for shared PPO, backend and benchmark recipes, not model defaults or tests.
 - The old flat config names have been replaced by the paths above, without
   compatibility aliases. Repository launchers, tests and docs use the new
   names. Update external `--config-name` or `SMOLVLA_CONFIG_NAME` arguments.
